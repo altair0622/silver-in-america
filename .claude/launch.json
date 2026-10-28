@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8737", "--directory", "app"],
+      "port": 8737
+    }
+  ]
+}

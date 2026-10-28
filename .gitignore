@@ -1,0 +1,6 @@
+node_modules/
+.claude/settings.local.json
+*.log
+# 개인 공과금 내보내기 파일은 커밋하지 않는다
+*-backup*.json
+silver-bills-*.json
