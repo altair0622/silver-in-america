@@ -142,6 +142,9 @@ function screenMonth(ym) {
   </div>`;
   if (counts.missed) html += `<p><b style="color:var(--bad)">확인이 필요한 항목이 ${counts.missed}개 있어요.</b> 눌러서 이유를 보세요.</p>`;
   else if (bills.length && counts.wait === 0) html += '<p><b style="color:var(--ok)">이번 달 모두 나갔어요.</b></p>';
+  if (bankReady() && counts.paid < bills.length) {
+    html += '<button class="btn" id="bankcheck">🏦 은행에서 확인하기</button><p id="bankmsg" class="hint" aria-live="polite"></p>';
+  }
 
   for (const g of groups) {
     if (!g.items.length) continue;
@@ -149,7 +152,7 @@ function screenMonth(ym) {
     g.items.sort((x, y) => x.b.dueDay - y.b.dueDay);
     for (const { b, s } of g.items) {
       const sub = s.key === 'paid'
-        ? `${dayLabel(s.payment.paidDate)} 나감${s.payment.amount != null ? ` · $${s.payment.amount}` : ''}`
+        ? `${dayLabel(s.payment.paidDate)} 나감${s.payment.amount != null ? ` · $${s.payment.amount}` : ''}${s.payment.txId ? ' · 은행 확인' : ''}`
         : s.detail;
       html += `<a class="bill ${s.key === 'missed' ? 'missed' : ''}" href="#/check/${b.id}/${ym}">
         <div class="who"><b>${esc(b.vendor)}</b><span>${esc(b.kind)} · ${esc(sub)}</span></div>
@@ -161,6 +164,21 @@ function screenMonth(ym) {
   html += `<div class="scam"><b>잠깐!</b> "전기가 곧 끊긴다, 기프트카드로 지금 내라"는 전화는 <b>사기</b>예요.
     전화를 끊고 이 화면에서 "나감"인지 먼저 확인하세요. 진짜 회사는 기프트카드를 요구하지 않아요.</div>`;
   render(isNow ? '이번 달 한눈에' : monthLabel(ym), html, isNow ? 'home' : 'history');
+
+  const bc = document.getElementById('bankcheck');
+  if (bc) bc.onclick = async () => {
+    bc.disabled = true; bc.textContent = '은행에서 가져오는 중…';
+    try {
+      const marked = await autoCheck(ym);
+      screenMonth(ym);
+      document.getElementById('bankmsg') && (document.getElementById('bankmsg').textContent = marked.length
+        ? `${marked.join(', ')} — 은행 거래를 찾아 "나감"으로 표시했어요. 맞는지 한 번 봐 주세요.`
+        : '새로 찾은 출금이 없어요. 항목을 눌러 은행 거래 목록에서 직접 고를 수도 있어요.');
+    } catch (e) {
+      bc.disabled = false; bc.textContent = '🏦 은행에서 확인하기';
+      document.getElementById('bankmsg').textContent = `가져오지 못했어요: ${e.message}`;
+    }
+  };
 }
 
 /* ---------- 화면 2: 확인 체크 ---------- */
@@ -196,6 +214,7 @@ function screenCheck(billId, ym) {
       <label for="n">메모 (선택)</label>
       <input id="n" type="text" placeholder="예: 은행 앱에서 확인">
       <button class="btn" type="submit">✓ 나갔어요</button></form>`;
+    if (bankReady()) html += '<h3>은행 거래 중에 있나요?</h3><div id="cands" class="hint">은행 거래를 불러오는 중…</div>';
   }
   html += `<a class="btn ghost" href="#/bill/${b.id}">항목 고치기</a>
     <a class="btn ghost" href="${ym === thisMonth() ? '#/' : `#/month/${ym}`}">← 돌아가기</a>`;
@@ -210,6 +229,24 @@ function screenCheck(billId, ym) {
     save();
     go(ym === thisMonth() ? '#/' : `#/month/${ym}`);
   };
+  const cands = document.getElementById('cands');
+  if (cands) monthTransactions(ym).then(txs => {
+    const used = new Set(db.payments.map(x => x.txId).filter(Boolean));
+    const list = candidates(b, ym, txs).filter(t => !used.has(t.id))
+      .sort((x, y) => Number(nameMatches(b, y)) - Number(nameMatches(b, x)) || x.date.localeCompare(y.date));
+    if (!list.length) { cands.textContent = '예정일 앞뒤로 은행에서 나간 돈이 없어요.'; return; }
+    cands.className = '';
+    cands.innerHTML = list.map(t => `<button class="bill" data-tx="${esc(t.id)}">
+      <div class="who"><b>${esc(t.name)}</b><span>${dayLabel(t.date)} · $${t.amount.toFixed(2)}${t.mask ? ` · 끝 ${esc(t.mask)}` : ''}${t.pending ? ' · 처리 중' : ''}</span></div>
+      ${nameMatches(b, t) ? '<span class="badge s-paid">이름 비슷</span>' : ''}</button>`).join('')
+      + '<p class="hint">맞는 거래를 누르면 그 날짜·금액으로 "나감" 처리돼요.</p>';
+    cands.querySelectorAll('[data-tx]').forEach(btn => btn.onclick = () => {
+      const t = list.find(x => x.id === btn.dataset.tx);
+      db.payments.push({ billId: b.id, month: ym, paidDate: t.date, amount: t.amount, txId: t.id, note: `은행 거래: ${t.name}` });
+      save(); go(ym === thisMonth() ? '#/' : `#/month/${ym}`);
+    });
+  }).catch(e => { cands.textContent = `은행 거래를 불러오지 못했어요: ${e.message}`; });
+
   const undo = document.getElementById('undo');
   if (undo) undo.onclick = () => {
     if (!confirm('"나감" 표시를 취소할까요?')) return;
@@ -245,6 +282,9 @@ function screenBill(id) {
     <p class="hint">금액이 매달 같으면 "많을 때"는 비워 두세요.</p>
     <label for="m">내는 방법</label>
     <select id="m">${Object.entries(METHODS).map(([k, t]) => opt(k, t, b.method)).join('')}</select>
+    <label for="bm">은행 거래에 보이는 이름 (선택)</label>
+    <input id="bm" value="${esc(b.bankMatch || '')}" placeholder="예: GA POWER" autocomplete="off">
+    <p class="hint">은행 내역에 회사 이름이 다르게 찍히면 적어 주세요. 비우면 회사 이름으로 찾아요.</p>
     <button class="btn" type="submit">저장</button>
   </form>
   ${isNew ? '' : '<button class="btn danger" id="del">이 항목 그만 보기</button>'}
@@ -256,7 +296,7 @@ function screenBill(id) {
     const val = x => document.getElementById(x).value;
     const lo = val('lo'), hi = val('hi');
     Object.assign(b, { vendor: val('v').trim(), kind: val('k'), accountId: val('ac'), dueDay: Number(val('dd')),
-      amountMin: lo === '' ? '' : Number(lo), amountMax: hi === '' ? '' : Number(hi), method: val('m') });
+      amountMin: lo === '' ? '' : Number(lo), amountMax: hi === '' ? '' : Number(hi), method: val('m'), bankMatch: val('bm').trim() });
     if (isNew) { b.id = uid(); b.active = true; b.since = thisMonth(); db.bills.push(b); }
     save(); go('#/');
   };
@@ -298,6 +338,8 @@ function screenSettings() {
     <div><label for="a4">끝 4자리</label><input id="a4" inputmode="numeric" maxlength="4" pattern="[0-9]{4}" placeholder="1234"></div></div>
     <button class="btn ghost" type="submit">+ 계좌 추가</button></form>
 
+    ${bankSettingsHtml()}
+
     <h2>가족 한마디</h2><p class="hint">첫 화면 맨 위에 보여요. 자녀가 직접 써 주세요.</p>
     <form id="fn"><label for="nt">한마디</label>
     <textarea id="nt" rows="2" placeholder="예: 엄마, 빨간 표시 뜨면 저한테 전화 주세요">${esc(db.familyNote)}</textarea>
@@ -315,7 +357,9 @@ function screenSettings() {
     <label class="btn ghost" for="imp" style="margin:12px 0">백업 파일 불러오기</label>
     <input id="imp" type="file" accept="application/json,.json" hidden>
     ${db.sample ? '<button class="btn danger" id="clear">샘플 지우고 처음부터 시작</button>' : ''}
-    <p class="muted small" style="margin-top:24px">1단계 · AI 사용 없음 · 서버로 보내는 자료 없음</p>`;
+    <p class="muted small" style="margin-top:24px">AI 사용 없음 · ${bank
+      ? '은행 거래내역은 Plaid 를 거쳐 이 컴퓨터에만 저장'
+      : '서버로 보내는 자료 없음'}</p>`;
   render('설정', html, 'settings');
 
   const $ = id => document.getElementById(id);
@@ -327,6 +371,13 @@ function screenSettings() {
   view.querySelectorAll('[data-del]').forEach(btn => btn.onclick = () => {
     db.accounts = db.accounts.filter(a => a.id !== btn.dataset.del); save(); screenSettings();
   });
+  const connect = async (btn, fn) => {
+    btn.disabled = true;
+    try { await fn(); bank = await api('/api/status'); screenSettings(); }
+    catch (e) { btn.disabled = false; alert(`은행을 연결하지 못했어요: ${e.message}`); }
+  };
+  if ($('link')) $('link').onclick = () => connect($('link'), openPlaidLink);
+  if ($('sbx')) $('sbx').onclick = () => connect($('sbx'), () => api('/api/sandbox-connect', {}));
   $('fn').onsubmit = e => { e.preventDefault(); db.familyNote = $('nt').value.trim(); db.familyName = $('nm').value.trim(); save(); alert('저장했어요.'); };
   $('g').onchange = () => { db.graceDays = Number($('g').value); save(); };
   $('exp').onclick = () => {
@@ -383,6 +434,109 @@ function sampleData() {
   return d;
 }
 
+/* ---------- 은행 연결 (Plaid, 로컬 서버가 있을 때만) ---------- */
+// GitHub Pages 처럼 서버가 없는 곳에서는 bank 가 null 이고 은행 관련 버튼이 보이지 않는다.
+
+let bank = null;
+
+async function api(pathname, body) {
+  const res = await fetch(pathname, body === undefined ? {} : {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(json.error || `오류 ${res.status}`);
+  return json;
+}
+
+async function loadBank() {
+  if (location.protocol === 'file:' || location.hostname.endsWith('github.io')) return;
+  try { bank = await api('/api/status'); } catch { bank = null; }
+}
+const bankReady = () => bank && bank.configured && bank.banks.length > 0;
+
+// 업체명을 은행 거래 이름과 비교할 단어로 나눈다 (짧거나 흔한 단어는 뺀다)
+const STOP = new Set(['the', 'inc', 'llc', 'co', 'corp', 'company', 'of', 'and', 'county', 'city', 'bill', 'pay', 'payment']);
+const words = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length >= 3 && !STOP.has(w));
+
+function nameMatches(bill, t) {
+  const hay = ` ${words(`${t.name} ${t.merchant}`).join(' ')} `;
+  const want = words(bill.bankMatch || bill.vendor);
+  if (!want.length) return false;
+  const hit = want.filter(w => hay.includes(` ${w} `)).length;
+  return hit >= Math.min(2, want.length); // 두 단어 이상이면 두 개는 맞아야 한다 (예: Georgia + Power)
+}
+
+// 예정일 7일 전 ~ 예정일+유예+7일 사이의 출금(양수 금액)
+function candidates(bill, ym, txs) {
+  const due = dueDate(bill, ym);
+  const from = addDays(due, -7), to = addDays(due, db.graceDays + 7);
+  const acc = accountOf(bill.accountId);
+  return txs.filter(t => t.amount > 0 && t.date >= from && t.date <= to && !(acc?.last4 && t.mask && acc.last4 !== t.mask));
+}
+
+async function monthTransactions(ym) {
+  const { transactions } = await api(`/api/transactions?from=${addDays(`${ym}-01`, -7)}&to=${addDays(`${ym}-${daysInMonth(ym)}`, 14)}`);
+  return transactions;
+}
+
+// 은행 거래와 맞춰 '나감' 자동 체크. 이미 다른 항목에 쓴 거래는 다시 쓰지 않는다.
+async function autoCheck(ym) {
+  await api('/api/sync', {});
+  const txs = await monthTransactions(ym);
+  const used = new Set(db.payments.map(p => p.txId).filter(Boolean));
+  const marked = [];
+  for (const b of billsIn(ym)) {
+    if (paymentFor(b.id, ym)) continue;
+    const due = dueDate(b, ym);
+    const hit = candidates(b, ym, txs).filter(t => !used.has(t.id) && nameMatches(b, t))
+      .sort((x, y) => Math.abs(Date.parse(x.date) - Date.parse(due)) - Math.abs(Date.parse(y.date) - Date.parse(due)))[0];
+    if (!hit) continue;
+    used.add(hit.id);
+    db.payments.push({ billId: b.id, month: ym, paidDate: hit.date, amount: hit.amount, txId: hit.id, auto: true,
+      note: `은행 거래: ${hit.name}${hit.pending ? ' (처리 중)' : ''}` });
+    marked.push(b.vendor);
+  }
+  save();
+  bank = await api('/api/status');
+  return marked;
+}
+
+function openPlaidLink() {
+  return new Promise((resolve, reject) => {
+    const start = async () => {
+      try {
+        const { link_token } = await api('/api/link-token', {});
+        window.Plaid.create({
+          token: link_token,
+          onSuccess: async public_token => { try { resolve(await api('/api/exchange', { public_token })); } catch (e) { reject(e); } },
+          onExit: err => err ? reject(new Error(err.display_message || err.error_message || '연결을 마치지 못했어요')) : resolve(null),
+        }).open();
+      } catch (e) { reject(e); }
+    };
+    if (window.Plaid) return start();
+    const s = document.createElement('script');
+    s.src = 'https://cdn.plaid.com/link/v2/stable/link-initialize.js';
+    s.onload = start;
+    s.onerror = () => reject(new Error('Plaid 화면을 불러오지 못했어요'));
+    document.head.appendChild(s);
+  });
+}
+
+function bankSettingsHtml() {
+  if (!bank) return '';
+  let html = '<h2>은행 연결</h2>';
+  if (!bank.configured) return html + '<p class="hint">서버에 Plaid 키가 아직 없어요. server/.env 를 채워 주세요.</p>';
+  if (bank.env === 'sandbox') html += '<p class="sample-banner">지금은 Plaid 시험용(가짜 은행) 모드예요.</p>';
+  if (bank.accounts.length) {
+    html += '<ul class="list-plain">' + bank.accounts.map(a =>
+      `<li><b>${esc(a.institution || '은행')}</b> · ${esc(a.name)}${a.mask ? ` (끝 ${esc(a.mask)})` : ''}</li>`).join('') + '</ul>';
+    html += `<p class="hint">마지막으로 가져온 때: ${bank.syncedAt ? esc(new Date(bank.syncedAt).toLocaleString('ko-KR')) : '아직 없음'}</p>`;
+  } else html += '<p class="hint">연결된 은행이 없어요.</p>';
+  html += '<button class="btn ghost" id="link">+ 은행 연결하기</button>';
+  if (bank.env === 'sandbox') html += '<button class="btn ghost" id="sbx">시험 은행 바로 연결</button>';
+  html += '<p class="hint">은행 로그인은 Plaid 화면에서 하고, 이 앱은 비밀번호를 보지 않아요. 거래내역은 이 컴퓨터에만 저장돼요.</p>';
+  return html;
+}
+
 /* ---------- 길 찾기 ---------- */
 
 function go(hash) { if (location.hash === hash) route(); else location.hash = hash; }
@@ -403,7 +557,7 @@ function route() {
 db = load();
 if (db.sample) save();
 window.addEventListener('hashchange', route);
-route();
+loadBank().then(route);
 
 if ('serviceWorker' in navigator && location.protocol !== 'file:') {
   navigator.serviceWorker.register('sw.js').catch(() => {});
