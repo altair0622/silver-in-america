@@ -1,110 +1,183 @@
-/* 시니어 UX: 큰 글씨(기본 21px), 큰 버튼(최소 56px), 아이콘에는 항상 글자를 같이 */
+/*
+ * 우리 스타일 A1 (_team/doyun/DESIGN.md) + 이 앱 조정:
+ * 포인트색 A1 파랑 그대로 · 글자 A3 단계(본문 18 · 제목 32 — 어르신용) · 모서리 기본(카드 12 · 버튼 10)
+ * 상태색(초록·노랑·빨강)은 나감·아직·안 나감에만 쓴다. 아이콘엔 항상 글자를 같이.
+ */
 :root {
-  --bg: #f7f5f0;
-  --card: #ffffff;
-  --ink: #1d1d1b;
-  --muted: #5c5a55;
-  --line: #d9d5cc;
-  --brand: #1f5e4b;
+  --bg: #ffffff;
+  --surface: #f5f6f8;
+  --text: #1b1d21;
+  --muted: #5f6670;
+  --line: #e3e6ea;
+  --accent: #2f6fde;
+  --on-accent: #ffffff;
+  --tint: #eaf1fd;
   --ok: #1e6b3a;
   --ok-bg: #e3f2e7;
   --wait: #6b5200;
   --wait-bg: #fbf1d0;
   --bad: #a1261b;
   --bad-bg: #fbe3df;
+  --flag-bg: #fff3c4;
   --note: #2d4a8a;
-  font-size: 21px;
+  --note-bg: #fffdf3;
+  --note-line: #c9b26b;
+  color-scheme: light;
+  font-size: 18px;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #121316;
+    --surface: #1c1e22;
+    --text: #eceef2;
+    --muted: #a3a9b3;
+    --line: #2e3137;
+    --accent: #5b8ff0;
+    --on-accent: #0b1530;
+    --tint: #1d2a44;
+    --ok: #8fd6a4;
+    --ok-bg: #18301f;
+    --wait: #f0cf6b;
+    --wait-bg: #33290c;
+    --bad: #ff9b8f;
+    --bad-bg: #3a1a16;
+    --flag-bg: #4a3c0c;
+    --note: #b8c9f2;
+    --note-bg: #1f1d14;
+    --note-line: #6b5d2e;
+    color-scheme: dark;
+  }
 }
 * { box-sizing: border-box; }
 body {
   margin: 0;
   background: var(--bg);
-  color: var(--ink);
-  font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif;
+  color: var(--text);
+  font-family: system-ui, "Malgun Gothic", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
   line-height: 1.5;
+  word-break: keep-all;
+  overflow-wrap: anywhere;
   padding-bottom: 96px;
 }
-.top { background: var(--brand); color: #fff; padding: 14px 16px; }
-.top h1 { margin: 0; font-size: 1.3rem; }
+.top { background: var(--bg); border-bottom: 1px solid var(--line); padding: 12px 16px; }
+.top h1 { margin: 0; font-size: 1.5rem; font-weight: 700; }
 main { max-width: 640px; margin: 0 auto; padding: 16px; outline: none; }
 
 .tabs {
   position: fixed; bottom: 0; left: 0; right: 0;
-  display: flex; background: var(--card); border-top: 2px solid var(--line);
+  display: flex; background: var(--bg); border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
 }
 .tabs a {
-  flex: 1; text-align: center; padding: 18px 4px; min-height: 64px;
+  flex: 1; text-align: center; padding: 16px 4px; min-height: 60px;
   color: var(--muted); text-decoration: none; font-weight: 600;
 }
-.tabs a.on { color: var(--brand); background: #eaf2ee; border-top: 4px solid var(--brand); margin-top: -2px; }
+.tabs a.on { color: var(--accent); background: var(--tint); box-shadow: inset 0 3px 0 var(--accent); }
 
-h2 { font-size: 1.25rem; margin: 20px 0 10px; }
-h3 { font-size: 1.05rem; margin: 18px 0 8px; color: var(--muted); }
+h2 { font-size: 1.25rem; margin: 24px 0 8px; }
+h3 { font-size: 1rem; margin: 24px 0 8px; color: var(--muted); font-weight: 600; }
 p { margin: 8px 0; }
 .muted { color: var(--muted); }
 .small { font-size: .85rem; }
+.lead { font-weight: 700; }
+.lead.ok { color: var(--ok); }
+.lead.bad { color: var(--bad); }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.summary { display: flex; gap: 8px; margin: 8px 0 4px; flex-wrap: wrap; }
-.summary span { padding: 6px 12px; border-radius: 999px; font-weight: 700; }
+.summary { display: flex; gap: 8px; margin: 12px 0 4px; flex-wrap: wrap; }
+.summary span { padding: 4px 12px; border-radius: 999px; font-weight: 700; }
 
 .month-nav { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-.month-nav strong { font-size: 1.2rem; white-space: nowrap; }
+.month-nav strong { font-size: 1.25rem; white-space: nowrap; }
 .month-nav .btn { white-space: nowrap; }
+.month-nav .spacer { width: 80px; }
+/* 글자 200% 확대(412→206px)에서도 옆으로 밀리지 않게 */
+@media (max-width: 360px) {
+  .month-nav { flex-wrap: wrap; }
+  .month-nav .spacer { display: none; }
+}
+
+/* 묶어 보기: 통장·카드별 / 종류별 */
+.seg { display: flex; margin: 16px 0 0; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.seg button {
+  flex: 1; min-height: 48px; font: inherit; font-weight: 600; border: 0; cursor: pointer;
+  background: var(--bg); color: var(--muted);
+}
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--on-accent); }
 
 .bill {
   display: flex; align-items: center; gap: 12px; width: 100%;
-  background: var(--card); border: 2px solid var(--line); border-radius: 14px;
-  padding: 14px; margin: 10px 0; text-align: left; font: inherit; color: inherit;
-  text-decoration: none; min-height: 72px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 12px;
+  padding: 12px 16px; margin: 8px 0; text-align: left; font: inherit; color: inherit;
+  text-decoration: none; min-height: 64px; cursor: pointer;
 }
 .bill .who { flex: 1; min-width: 0; }
-.bill .who b { display: block; font-size: 1.05rem; overflow-wrap: anywhere; }
+.bill .who b { display: block; font-size: 1.1rem; }
 .bill .who span { color: var(--muted); font-size: .9rem; }
+.bill.missed { border-color: var(--bad); border-width: 2px; }
 
-.badge { flex: none; padding: 6px 12px; border-radius: 10px; font-weight: 800; white-space: nowrap; }
+.badge { flex: none; padding: 4px 10px; border-radius: 10px; font-weight: 700; white-space: nowrap; }
 .s-paid { background: var(--ok-bg); color: var(--ok); }
 .s-wait { background: var(--wait-bg); color: var(--wait); }
 .s-missed { background: var(--bad-bg); color: var(--bad); }
-.bill.missed { border-color: var(--bad); }
 
 .btn {
-  display: block; width: 100%; min-height: 60px; margin: 12px 0;
-  border-radius: 14px; border: 2px solid var(--brand);
-  background: var(--brand); color: #fff; font: inherit; font-weight: 700;
-  text-align: center; text-decoration: none; padding: 14px; cursor: pointer;
+  display: block; width: 100%; min-height: 56px; margin: 12px 0;
+  border-radius: 10px; border: 1px solid var(--accent);
+  background: var(--accent); color: var(--on-accent); font: inherit; font-weight: 700;
+  text-align: center; text-decoration: none; padding: 12px 16px; cursor: pointer;
 }
-.btn.ghost { background: var(--card); color: var(--brand); }
-.btn.danger { background: var(--card); color: var(--bad); border-color: var(--bad); }
+.btn.ghost { background: var(--bg); color: var(--accent); }
+.btn.danger { background: var(--bg); color: var(--bad); border-color: var(--bad); }
 .btn.small-btn { display: inline-block; width: auto; min-height: 48px; margin: 0; padding: 8px 16px; }
+.btn:disabled { opacity: .6; cursor: default; }
 
-.card { background: var(--card); border: 2px solid var(--line); border-radius: 14px; padding: 16px; margin: 12px 0; }
-.card.warn { border-color: var(--bad); background: #fff8f6; }
-.card.warn ul { margin: 6px 0; padding-left: 1.2em; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin: 12px 0; }
+.card.warn { border-color: var(--bad); background: var(--bad-bg); }
+.card.warn ul { margin: 8px 0; padding-left: 1.2em; }
 .card.warn li { margin: 4px 0; }
 
+/* 인간다움 한 스푼: 자녀가 직접 쓴 한마디 */
 .family-note {
-  background: #fffdf3; border: 2px dashed #c9b26b; border-radius: 14px;
-  padding: 12px 16px; margin: 4px 0 12px; color: var(--note);
-  font-family: "Nanum Pen Script", "Gaegu", cursive, var(--font, sans-serif);
-  font-size: 1.15rem;
+  background: var(--note-bg); border: 1px dashed var(--note-line); border-radius: 12px;
+  padding: 12px 16px; margin: 0 0 12px; color: var(--note);
+  font-family: "Nanum Pen Script", "Gaegu", cursive; font-size: 1.15rem;
 }
-.family-note small { display: block; color: var(--muted); font-family: inherit; font-size: .75rem; }
+.family-note small { display: block; color: var(--muted); font-size: .75rem; }
 
-.sample-banner { background: var(--wait-bg); color: var(--wait); border-radius: 12px; padding: 10px 14px; font-size: .9rem; }
+.sample-banner { background: var(--wait-bg); color: var(--wait); border-radius: 12px; padding: 8px 16px; font-size: .9rem; }
 
-label { display: block; font-weight: 700; margin: 16px 0 6px; }
+/* 지난 기록: 항목 × 달 금액표 (412px 폰에 세 달이 들어가게) */
+.table-wrap { margin: 8px 0; }
+table.amounts { width: 100%; border-collapse: collapse; table-layout: fixed; font-variant-numeric: tabular-nums; }
+.amounts th, .amounts td { padding: 8px 4px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.amounts thead th { font-size: .9rem; color: var(--muted); font-weight: 600; text-align: right; }
+.amounts thead th:first-child, .amounts tbody th, .amounts tfoot th { text-align: left; width: 36%; }
+.amounts tbody th { font-weight: 600; font-size: .95rem; }
+.amounts td { text-align: right; }
+.amounts td a { display: block; min-height: 40px; padding: 4px 2px; color: inherit; text-decoration: none; border-radius: 8px; }
+.amounts td small { display: block; font-size: .8rem; font-weight: 700; }
+.amounts td.flag a { background: var(--flag-bg); font-weight: 700; }
+.amounts td.wait { color: var(--wait); }
+.amounts td.missed { color: var(--bad); font-weight: 700; }
+.amounts td.none { color: var(--muted); }
+.amounts tr.grp th { padding-top: 16px; font-size: .85rem; color: var(--muted); font-weight: 600; }
+.amounts tfoot th, .amounts tfoot td { font-weight: 700; border-top: 2px solid var(--text); border-bottom: 0; }
+
+label { display: block; font-weight: 700; margin: 16px 0 8px; }
 input, select, textarea {
-  width: 100%; font: inherit; padding: 12px; min-height: 56px;
-  border: 2px solid var(--line); border-radius: 12px; background: #fff; color: var(--ink);
+  width: 100%; font: inherit; padding: 12px; min-height: 52px;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text);
 }
-input:focus, select:focus, textarea:focus, .btn:focus-visible, .bill:focus-visible, .tabs a:focus-visible {
-  outline: 4px solid #f0b400; outline-offset: 2px;
+input:focus, select:focus, textarea:focus, .btn:focus-visible, .bill:focus-visible, .tabs a:focus-visible,
+.seg button:focus-visible, .amounts a:focus-visible {
+  outline: 3px solid #f0b400; outline-offset: 2px;
 }
-.row { display: flex; gap: 10px; }
-.row > * { flex: 1; }
-.hint { color: var(--muted); font-size: .85rem; margin-top: 4px; }
+.row { display: flex; gap: 12px; }
+.row > * { flex: 1; min-width: 0; }
+.hint { color: var(--muted); font-size: .9rem; margin-top: 4px; }
 
-.scam { border-left: 6px solid var(--bad); background: var(--card); padding: 12px 14px; border-radius: 10px; margin: 18px 0; font-size: .95rem; }
+.scam { border-left: 4px solid var(--bad); background: var(--surface); padding: 12px 16px; border-radius: 12px; margin: 24px 0; font-size: .95rem; }
 .list-plain { list-style: none; padding: 0; margin: 0; }
-.list-plain li { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.list-plain li { padding: 12px 0; border-bottom: 1px solid var(--line); }

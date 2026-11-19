@@ -36,7 +36,9 @@ python -m http.server 8737 --directory app
 
 ```
 app/index.html          껍데기 + 아래 탭
-app/app.js              자료·상태 계산·화면 5개 (이번 달 / 확인 / 항목 / 지난 기록 / 설정)
+app/logic.js            화면과 상관없는 계산 (날짜·은행 거래 매칭·Plaid 변환·지난달 대비) — 앱·서버·테스트가 같이 씀
+app/app.js              자료·상태·화면 5개 (이번 달 / 확인 / 항목 / 지난 기록 / 설정), Plaid 형식 샘플
+tests/logic.test.js     node --test tests/*.test.js
 app/style.css           시니어 UX: 기본 21px, 버튼 최소 56px, 아이콘엔 항상 글자
 app/sw.js, manifest     홈 화면 추가·오프라인
 server/server.js        Plaid 연동 로컬 서버 (외부 패키지 없음, Node 22+)

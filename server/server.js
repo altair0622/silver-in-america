@@ -10,6 +10,7 @@ const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { fromPlaid } = require('../app/logic.js');
 
 const ROOT = path.join(__dirname, '..', 'app');
 const DATA_DIR = path.join(__dirname, '.data');
@@ -93,11 +94,9 @@ async function syncAll() {
       for (const a of r.accounts || []) s.accounts[a.account_id] = { name: a.name, mask: a.mask, itemId: item.itemId, institution: item.institution };
       for (const t of [...r.added, ...r.modified]) {
         if (!s.tx[t.transaction_id]) added++;
-        // 화면에 필요한 것만 남긴다
-        s.tx[t.transaction_id] = {
-          id: t.transaction_id, accountId: t.account_id, date: t.date, amount: t.amount,
-          name: t.name, merchant: t.merchant_name || '', pending: t.pending,
-        };
+        // 화면에 필요한 것만 남긴다 — 앱 샘플과 같은 변환(app/logic.js)
+        const { mask, ...slim } = fromPlaid(t);
+        s.tx[t.transaction_id] = slim;
       }
       for (const t of r.removed) delete s.tx[t.transaction_id];
       item.cursor = r.next_cursor;

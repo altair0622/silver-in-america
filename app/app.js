@@ -6,6 +6,7 @@
  */
 
 const STORE_KEY = 'silver-bills-v1';
+const SAMPLE_VERSION = 2; // 2: Plaid 형식 거래에서 만든 4달치 샘플
 
 const KINDS = ['전기', '수도', '가스', '인터넷', '휴대폰', '보험', '쓰레기', '기타'];
 const METHODS = { auto: '자동이체', card: '카드 자동결제', manual: '직접 냄' };
@@ -20,13 +21,14 @@ const REASONS = {
 /* ---------- 저장 ---------- */
 
 function emptyData() {
-  return { version: 1, sample: false, graceDays: 3, familyNote: '', familyName: '', accounts: [], bills: [], payments: [] };
+  return { version: 1, sample: false, graceDays: 3, groupBy: 'account', familyNote: '', familyName: '', accounts: [], bills: [], payments: [] };
 }
 
 function load() {
   try {
     const raw = localStorage.getItem(STORE_KEY);
-    if (raw) return Object.assign(emptyData(), JSON.parse(raw));
+    // 예전 판 샘플이 남아 있으면 새 샘플로 바꾼다 (실제 자료는 건드리지 않는다)
+    if (raw) { const d = JSON.parse(raw); if (!(d.sample && d.sampleVersion !== SAMPLE_VERSION)) return Object.assign(emptyData(), d); }
   } catch (e) { /* 읽지 못하면 샘플로 시작 */ }
   return sampleData();
 }
@@ -38,27 +40,14 @@ function save() {
 
 let db; // 날짜 함수가 정의된 뒤 아래 '길 찾기'에서 불러온다
 
-/* ---------- 날짜 ---------- */
+/* ---------- 날짜 (계산은 logic.js) ---------- */
 
-const pad = n => String(n).padStart(2, '0');
+const { pad, daysInMonth, addMonths, addDays, dueDate } = L;
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 const thisMonth = () => today().slice(0, 7);
-
-function daysInMonth(ym) { const [y, m] = ym.split('-').map(Number); return new Date(y, m, 0).getDate(); }
-function addMonths(ym, n) {
-  const [y, m] = ym.split('-').map(Number);
-  const d = new Date(y, m - 1 + n, 1);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}`;
-}
-function addDays(date, n) {
-  const [y, m, d] = date.split('-').map(Number);
-  const t = new Date(y, m - 1, d + n);
-  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
-}
-// 예정일이 31일인데 그 달이 30일까지면 말일로 본다
-function dueDate(bill, ym) { return `${ym}-${pad(Math.min(bill.dueDay, daysInMonth(ym)))}`; }
 function monthLabel(ym) { const [y, m] = ym.split('-'); return `${y}년 ${Number(m)}월`; }
 function dayLabel(date) { const [, m, d] = date.split('-'); return `${Number(m)}월 ${Number(d)}일`; }
+const shortMonth = ym => `${Number(ym.slice(5))}월`;
 
 /* ---------- 상태 계산 ---------- */
 
@@ -71,9 +60,9 @@ function statusOf(bill, ym) {
   const due = dueDate(bill, ym);
   const deadline = addDays(due, db.graceDays);
   const now = today();
-  if (now < due) return { key: 'wait', label: '⏳ 아직', detail: `${dayLabel(due)} 예정` };
-  if (now <= deadline) return { key: 'wait', label: '⏳ 아직', detail: `${dayLabel(due)} 예정 · ${dayLabel(deadline)}까지 기다려 봐요` };
-  return { key: 'missed', label: '⚠ 안 나감', detail: `${dayLabel(due)} 예정이었어요` };
+  if (now < due) return { key: 'wait', label: '○ 아직', detail: `${dayLabel(due)} 예정` };
+  if (now <= deadline) return { key: 'wait', label: '○ 아직', detail: `${dayLabel(due)} 예정 · ${dayLabel(deadline)}까지 기다려 봐요` };
+  return { key: 'missed', label: '! 안 나감', detail: `${dayLabel(due)} 예정이었어요` };
 }
 
 function amountText(bill) {
@@ -94,6 +83,33 @@ const activeBills = () => db.bills.filter(b => b.active !== false);
 const billsIn = ym => activeBills().filter(b => !b.since || b.since <= ym);
 const firstMonth = () => activeBills().reduce((m, b) => (b.since && b.since < m ? b.since : m), thisMonth());
 const uid = () => Math.random().toString(36).slice(2, 10);
+
+// 고른 묶음(통장·카드별 / 종류별)으로 나눈다. 묶음 안은 예정일 순.
+function groupBills(bills) {
+  const byDue = (x, y) => x.dueDay - y.dueDay;
+  if (db.groupBy === 'kind') {
+    return [...L.KIND_GROUPS, L.OTHER_GROUP]
+      .map(g => ({ title: g.label, items: bills.filter(b => L.kindGroup(b.kind).key === g.key).sort(byDue) }))
+      .filter(g => g.items.length);
+  }
+  const groups = db.accounts.map(a => ({
+    title: `${accountText(a)}${a.bank ? ` · ${a.bank}` : ''}`, items: bills.filter(b => b.accountId === a.id).sort(byDue) }));
+  const orphan = bills.filter(b => !accountOf(b.accountId));
+  if (orphan.length) groups.push({ title: '계좌 미지정', items: orphan.sort(byDue) });
+  return groups.filter(g => g.items.length);
+}
+
+function groupSwitchHtml() {
+  const opt = (key, label) => `<button type="button" data-group="${key}" aria-pressed="${db.groupBy === key}">${label}</button>`;
+  return `<div class="seg" role="group" aria-label="묶어 보기">${opt('account', '통장·카드별')}${opt('kind', '종류별')}</div>`;
+}
+function bindGroupSwitch(redraw) {
+  view.querySelectorAll('[data-group]').forEach(btn => btn.onclick = () => {
+    if (db.groupBy === btn.dataset.group) return;
+    db.groupBy = btn.dataset.group; save(); redraw();
+  });
+}
+const money = n => `$${Number(n).toFixed(2)}`;
 
 /* ---------- 그리기 도움 ---------- */
 
@@ -122,40 +138,37 @@ function screenMonth(ym) {
   const isNow = ym === thisMonth();
   const bills = billsIn(ym);
   const counts = { paid: 0, wait: 0, missed: 0 };
-  const rows = bills.map(b => { const s = statusOf(b, ym); counts[s.key]++; return { b, s }; });
-
-  // 계좌별로 묶는다. 예정일 순.
-  const groups = db.accounts.map(a => ({ a, items: rows.filter(r => r.b.accountId === a.id) }));
-  const orphan = rows.filter(r => !accountOf(r.b.accountId));
-  if (orphan.length) groups.push({ a: null, items: orphan });
+  const st = new Map(bills.map(b => { const s = statusOf(b, ym); counts[s.key]++; return [b.id, s]; }));
 
   let html = familyNoteHtml() + sampleBanner();
   html += `<div class="month-nav">
-    ${ym > firstMonth() ? `<a class="btn ghost small-btn" href="#/month/${addMonths(ym, -1)}">◀ 이전</a>` : '<span style="width:80px"></span>'}
+    ${ym > firstMonth() ? `<a class="btn ghost small-btn" href="#/month/${addMonths(ym, -1)}">◀ 이전</a>` : '<span class="spacer"></span>'}
     <strong>${monthLabel(ym)}</strong>
-    ${isNow ? '<span style="width:80px"></span>' : `<a class="btn ghost small-btn" href="#/month/${addMonths(ym, 1)}">다음 ▶</a>`}
+    ${isNow ? '<span class="spacer"></span>' : `<a class="btn ghost small-btn" href="#/month/${addMonths(ym, 1)}">다음 ▶</a>`}
   </div>`;
   html += `<div class="summary">
     <span class="s-paid">✓ 나감 ${counts.paid}</span>
-    <span class="s-wait">⏳ 아직 ${counts.wait}</span>
-    <span class="s-missed">⚠ 안 나감 ${counts.missed}</span>
+    <span class="s-wait">○ 아직 ${counts.wait}</span>
+    <span class="s-missed">! 안 나감 ${counts.missed}</span>
   </div>`;
-  if (counts.missed) html += `<p><b style="color:var(--bad)">확인이 필요한 항목이 ${counts.missed}개 있어요.</b> 눌러서 이유를 보세요.</p>`;
-  else if (bills.length && counts.wait === 0) html += '<p><b style="color:var(--ok)">이번 달 모두 나갔어요.</b></p>';
+  if (counts.missed) html += '<p class="lead bad">빨간 항목을 눌러 이유를 보세요.</p>';
+  else if (bills.length && counts.wait === 0) html += '<p class="lead ok">이번 달 모두 나갔어요.</p>';
   if (bankReady() && counts.paid < bills.length) {
-    html += '<button class="btn" id="bankcheck">🏦 은행에서 확인하기</button><p id="bankmsg" class="hint" aria-live="polite"></p>';
+    html += '<button class="btn" id="bankcheck">은행에서 확인하기</button><p id="bankmsg" class="hint" aria-live="polite"></p>';
   }
+  if (bills.length) html += groupSwitchHtml();
 
-  for (const g of groups) {
-    if (!g.items.length) continue;
-    html += `<h3>${esc(accountText(g.a))}${g.a?.bank ? ` · ${esc(g.a.bank)}` : ''}</h3>`;
-    g.items.sort((x, y) => x.b.dueDay - y.b.dueDay);
-    for (const { b, s } of g.items) {
+  for (const g of groupBills(bills)) {
+    html += `<h3>${esc(g.title)}</h3>`;
+    for (const b of g.items) {
+      const s = st.get(b.id);
       const sub = s.key === 'paid'
-        ? `${dayLabel(s.payment.paidDate)} 나감${s.payment.amount != null ? ` · $${s.payment.amount}` : ''}${s.payment.txId ? ' · 은행 확인' : ''}`
+        ? `${dayLabel(s.payment.paidDate)} 나감${s.payment.amount != null ? ` · ${money(s.payment.amount)}` : ''}${s.payment.txId ? ' · 은행 확인' : ''}`
         : s.detail;
+      // 종류별로 볼 때는 어느 통장·카드에서 나가는지를, 통장별로 볼 때는 종류를 보여 준다
+      const where = db.groupBy === 'kind' ? (accountOf(b.accountId)?.name || '계좌 미지정') : b.kind;
       html += `<a class="bill ${s.key === 'missed' ? 'missed' : ''}" href="#/check/${b.id}/${ym}">
-        <div class="who"><b>${esc(b.vendor)}</b><span>${esc(b.kind)} · ${esc(sub)}</span></div>
+        <div class="who"><b>${esc(b.vendor)}</b><span>${esc(where)} · ${esc(sub)}</span></div>
         <span class="badge s-${s.key}">${s.label}</span></a>`;
     }
   }
@@ -164,6 +177,7 @@ function screenMonth(ym) {
   html += `<div class="scam"><b>잠깐!</b> "전기가 곧 끊긴다, 기프트카드로 지금 내라"는 전화는 <b>사기</b>예요.
     전화를 끊고 이 화면에서 "나감"인지 먼저 확인하세요. 진짜 회사는 기프트카드를 요구하지 않아요.</div>`;
   render(isNow ? '이번 달 한눈에' : monthLabel(ym), html, isNow ? 'home' : 'history');
+  bindGroupSwitch(() => screenMonth(ym));
 
   const bc = document.getElementById('bankcheck');
   if (bc) bc.onclick = async () => {
@@ -175,7 +189,7 @@ function screenMonth(ym) {
         ? `${marked.join(', ')} — 은행 거래를 찾아 "나감"으로 표시했어요. 맞는지 한 번 봐 주세요.`
         : '새로 찾은 출금이 없어요. 항목을 눌러 은행 거래 목록에서 직접 고를 수도 있어요.');
     } catch (e) {
-      bc.disabled = false; bc.textContent = '🏦 은행에서 확인하기';
+      bc.disabled = false; bc.textContent = '은행에서 확인하기';
       document.getElementById('bankmsg').textContent = `가져오지 못했어요: ${e.message}`;
     }
   };
@@ -200,7 +214,7 @@ function screenCheck(billId, ym) {
 
   if (p) {
     html += `<div class="card"><b>${dayLabel(p.paidDate)}에 나갔어요</b>
-      ${p.amount != null ? `<p>금액: $${p.amount}</p>` : ''}
+      ${p.amount != null ? `<p>금액: ${money(p.amount)}</p>` : ''}
       ${outOfRange(b, p.amount) ? '<p style="color:var(--bad)">평소 금액과 많이 달라요. 청구서를 한 번 확인해 보세요.</p>' : ''}
       ${p.note ? `<p>메모: ${esc(p.note)}</p>` : ''}</div>
       <button class="btn danger" id="undo">"나감" 취소하기</button>`;
@@ -307,19 +321,62 @@ function screenBill(id) {
 
 /* ---------- 화면 4: 지난 기록 ---------- */
 
+// 아버님 피드백(11-18): 항목마다 달별 금액을 나란히, 한 달 합계도. 지난달과 많이 다르면 눈에 띄게만(판정은 사람이).
+const paidAmount = (b, ym) => { const p = paymentFor(b.id, ym); return p && p.amount != null ? Number(p.amount) : null; };
+
+function amountCell(b, ym) {
+  if (b.since && b.since > ym) return '<td class="none">—</td>';
+  const s = statusOf(b, ym);
+  const link = inner => `<a href="#/check/${b.id}/${ym}">${inner}</a>`;
+  if (s.key === 'wait') return `<td class="wait">${link('아직')}</td>`;
+  if (s.key === 'missed') return `<td class="missed">${link('! 없음')}</td>`;
+  const cur = paidAmount(b, ym);
+  if (cur == null) return `<td>${link('✓')}</td>`;
+  const c = L.change(paidAmount(b, addMonths(ym, -1)), cur);
+  if (!c || !c.flag) return `<td>${link(`$${Math.round(cur)}`)}</td>`;
+  const up = c.diff > 0;
+  return `<td class="flag">${link(`$${Math.round(cur)}<small>${up ? '▲' : '▼'} ${Math.round(Math.abs(c.pct) * 100)}%</small>`)}</td>`;
+}
+
+function amountTableHtml(months) {
+  const bills = activeBills().filter(b => !b.since || b.since <= months[months.length - 1]);
+  const head = `<tr><th scope="col">항목</th>${months.map(m => `<th scope="col">${shortMonth(m)}</th>`).join('')}</tr>`;
+  let body = '';
+  for (const g of groupBills(bills)) {
+    body += `<tr class="grp"><th colspan="${months.length + 1}" scope="rowgroup">${esc(g.title)}</th></tr>`;
+    for (const b of g.items) body += `<tr><th scope="row">${esc(b.vendor)}</th>${months.map(m => amountCell(b, m)).join('')}</tr>`;
+  }
+  const totals = months.map(m => bills.reduce((sum, b) => sum + (paidAmount(b, m) || 0), 0));
+  const foot = `<tr class="total"><th scope="row">합계</th>${totals.map(t => `<td>$${Math.round(t).toLocaleString('en-US')}</td>`).join('')}</tr>`;
+  return `<div class="table-wrap"><table class="amounts"><caption class="sr-only">달별 나간 금액</caption>
+    <thead>${head}</thead><tbody>${body}</tbody><tfoot>${foot}</tfoot></table></div>`;
+}
+
 function screenHistory() {
+  const now = thisMonth();
+  // 이번 달까지 최근 세 달을 나란히 (412px 폰 한 화면에 들어가는 칸 수)
+  const months = [-2, -1, 0].map(n => addMonths(now, n)).filter(m => m >= firstMonth());
   const list = [];
-  for (let ym = addMonths(thisMonth(), -1); ym >= firstMonth(); ym = addMonths(ym, -1)) list.push(ym);
-  let html = list.length ? '<p class="muted">달을 누르면 그 달 기록을 볼 수 있어요.</p>'
-                         : '<p class="muted">아직 지난 기록이 없어요. 다음 달부터 여기에 쌓여요.</p>';
+  for (let ym = addMonths(now, -1); ym >= firstMonth(); ym = addMonths(ym, -1)) list.push(ym);
+
+  let html = '';
+  if (activeBills().length && months.length > 1) {
+    html += groupSwitchHtml() + '<h2>달별 금액</h2>' + amountTableHtml(months);
+    html += `<p class="hint">지난달보다 ${Math.round(L.CHANGE_PCT * 100)}% 넘게, $${L.CHANGE_USD} 넘게 달라진 금액은 노란 칸이에요.
+      잘못 나간 건 아닌지 청구서와 맞춰 보세요. ${shortMonth(now)} 합계는 아직 안 나간 항목을 빼고 셌어요.</p>`;
+  }
+  html += '<h2>달마다 자세히</h2>';
+  html += list.length ? '<p class="muted">달을 누르면 그 달 기록을 볼 수 있어요.</p>'
+                      : '<p class="muted">아직 지난 기록이 없어요. 다음 달부터 여기에 쌓여요.</p>';
   for (const ym of list) {
     const c = { paid: 0, missed: 0 };
     billsIn(ym).forEach(b => { const k = statusOf(b, ym).key; if (k in c) c[k]++; });
     html += `<a class="bill ${c.missed ? 'missed' : ''}" href="#/month/${ym}">
       <div class="who"><b>${monthLabel(ym)}</b><span>나감 ${c.paid} · 안 나감 ${c.missed}</span></div>
-      <span class="badge ${c.missed ? 's-missed' : 's-paid'}">${c.missed ? '⚠ 확인 필요' : '✓ 모두 나감'}</span></a>`;
+      <span class="badge ${c.missed ? 's-missed' : 's-paid'}">${c.missed ? '! 확인 필요' : '✓ 모두 나감'}</span></a>`;
   }
   render('지난 기록', html, 'history');
+  bindGroupSwitch(screenHistory);
 }
 
 /* ---------- 설정: 계좌 · 가족 한마디 · 백업 ---------- */
@@ -406,6 +463,7 @@ function screenSettings() {
 function sampleData() {
   const d = emptyData();
   d.sample = true;
+  d.sampleVersion = SAMPLE_VERSION;
   d.familyNote = '엄마, 빨간 표시 뜨면 저한테 전화 주세요. 모르는 번호로 돈 내라는 전화는 끊으시고요!';
   d.familyName = '딸 지원';
   d.accounts = [
@@ -413,7 +471,7 @@ function sampleData() {
     { id: 'a2', name: '연금 통장', bank: 'Bank of America', last4: '5678' },
     { id: 'a3', name: '카드', bank: 'Costco Citi', last4: '9012' },
   ];
-  const since = addMonths(thisMonth(), -2);
+  const since = addMonths(thisMonth(), -3);
   d.bills = [
     { id: 'b1', vendor: 'Georgia Power', kind: '전기', accountId: 'a1', dueDay: 5, amountMin: 90, amountMax: 180, method: 'auto', active: true, since },
     { id: 'b2', vendor: 'Gwinnett County Water', kind: '수도', accountId: 'a1', dueDay: 12, amountMin: 45, amountMax: 80, method: 'auto', active: true, since },
@@ -422,16 +480,55 @@ function sampleData() {
     { id: 'b5', vendor: 'T-Mobile', kind: '휴대폰', accountId: 'a3', dueDay: 22, amountMin: 60, amountMax: '', method: 'card', active: true, since },
     { id: 'b6', vendor: 'State Farm', kind: '보험', accountId: 'a2', dueDay: 28, amountMin: 140, amountMax: '', method: 'auto', active: true, since },
   ];
-  // 지난 두 달은 모두 나감, 이번 달은 일부만 확인된 상태로 만든다 (T-Mobile 은 '안 나감' 예시)
-  const m0 = thisMonth();
-  for (const ym of [addMonths(m0, -2), addMonths(m0, -1)]) {
-    for (const b of d.bills) d.payments.push({ billId: b.id, month: ym, paidDate: dueDate(b, ym), amount: b.amountMin, note: '' });
-  }
-  for (const id of ['b1', 'b2', 'b4']) {
-    const b = d.bills.find(x => x.id === id);
-    if (dueDate(b, m0) <= today()) d.payments.push({ billId: id, month: m0, paidDate: dueDate(b, m0), amount: b.amountMin + 12, note: '' });
+  // '나감' 기록은 손으로 만들지 않고, Plaid 형식 가짜 거래를 실제 매칭 함수(L.matchMonth)에 통과시켜 만든다.
+  const masks = { 'sample-acc-1234': '1234', 'sample-acc-5678': '5678', 'sample-acc-9012': '9012' };
+  const txs = samplePlaidTransactions(d.bills).map(t => L.fromPlaid(t, masks));
+  const used = new Set();
+  for (let ym = since; ym <= thisMonth(); ym = addMonths(ym, 1)) {
+    const matches = L.matchMonth(d.bills, ym, txs, {
+      graceDays: d.graceDays, used,
+      last4Of: id => d.accounts.find(a => a.id === id)?.last4 || '',
+    });
+    for (const { bill, tx } of matches) {
+      d.payments.push({ billId: bill.id, month: ym, paidDate: tx.date, amount: tx.amount, txId: tx.id, auto: true,
+        note: `은행 거래: ${tx.name}${tx.pending ? ' (처리 중)' : ''}` });
+    }
   }
   return d;
+}
+
+// Plaid /transactions/sync 의 Transaction 과 같은 모양의 가짜 거래 (금액·이름은 지어낸 예시)
+// 이번 달: Georgia Power 가 평소의 두 배 넘게 나감(눈에 띄어야 하는 예), 가스는 계절 따라 조금 오름(표시 안 됨).
+// 지난달: T-Mobile 이 안 나감('안 나감' 예).
+function samplePlaidTransactions(bills) {
+  const m0 = thisMonth();
+  const plan = { // 3달 전, 2달 전, 지난달, 이번 달
+    b1: { name: 'GEORGIA POWER CO BILL PAY', merchant: 'Georgia Power', acc: 'sample-acc-1234', amt: [168.20, 142.55, 128.10, 311.40] },
+    b2: { name: 'GWINNETT CNTY WATER RES', merchant: 'Gwinnett County', acc: 'sample-acc-1234', amt: [52.10, 58.40, 55.75, 61.30] },
+    b3: { name: 'ATLANTA GAS LIGHT CO DEBIT', merchant: 'Atlanta Gas Light', acc: 'sample-acc-5678', amt: [34.20, 33.90, 41.80, 58.90] },
+    b4: { name: 'COMCAST XFINITY 800-266-2278', merchant: 'Xfinity', acc: 'sample-acc-9012', amt: [70.00, 70.00, 70.00, 85.00] },
+    b5: { name: 'T-MOBILE PCS SVC', merchant: 'T-Mobile', acc: 'sample-acc-9012', amt: [65.00, 65.00, null, 65.00] },
+    b6: { name: 'STATE FARM RO 27 SFPP', merchant: 'State Farm', acc: 'sample-acc-5678', amt: [142.00, 142.00, 142.00, 142.00] },
+  };
+  const out = [];
+  const tx = (id, acc, date, amount, name, merchant, category) => out.push({
+    transaction_id: id, account_id: acc, amount, iso_currency_code: 'USD', date, authorized_date: date,
+    name, merchant_name: merchant, pending: date >= addDays(today(), -1), payment_channel: 'other',
+    personal_finance_category: { primary: category, detailed: `${category}_OTHER` },
+  });
+  [-3, -2, -1, 0].forEach((off, i) => {
+    const ym = addMonths(m0, off);
+    for (const b of bills) {
+      const p = plan[b.id];
+      const date = addDays(dueDate(b, ym), b.id === 'b3' ? 1 : 0); // 가스는 하루 늦게 찍히는 예
+      if (!p || p.amt[i] == null || date > today()) continue;
+      tx(`sample-${b.id}-${ym}`, p.acc, date, p.amt[i], p.name, p.merchant, b.kind === '보험' ? 'LOAN_PAYMENTS' : 'RENT_AND_UTILITIES');
+    }
+    // 공과금이 아닌 거래도 섞어 둔다 (매칭에서 빠져야 한다)
+    const shop = `${ym}-10`;
+    if (shop <= today()) tx(`sample-kroger-${ym}`, 'sample-acc-1234', shop, 86.43, 'KROGER #1234', 'Kroger', 'FOOD_AND_DRINK');
+  });
+  return out;
 }
 
 /* ---------- 은행 연결 (Plaid, 로컬 서버가 있을 때만) ---------- */
@@ -453,48 +550,33 @@ async function loadBank() {
 }
 const bankReady = () => bank && bank.configured && bank.banks.length > 0;
 
-// 업체명을 은행 거래 이름과 비교할 단어로 나눈다 (짧거나 흔한 단어는 뺀다)
-const STOP = new Set(['the', 'inc', 'llc', 'co', 'corp', 'company', 'of', 'and', 'county', 'city', 'bill', 'pay', 'payment']);
-const words = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').split(' ').filter(w => w.length >= 3 && !STOP.has(w));
-
-function nameMatches(bill, t) {
-  const hay = ` ${words(`${t.name} ${t.merchant}`).join(' ')} `;
-  const want = words(bill.bankMatch || bill.vendor);
-  if (!want.length) return false;
-  const hit = want.filter(w => hay.includes(` ${w} `)).length;
-  return hit >= Math.min(2, want.length); // 두 단어 이상이면 두 개는 맞아야 한다 (예: Georgia + Power)
-}
-
-// 예정일 7일 전 ~ 예정일+유예+7일 사이의 출금(양수 금액)
-function candidates(bill, ym, txs) {
-  const due = dueDate(bill, ym);
-  const from = addDays(due, -7), to = addDays(due, db.graceDays + 7);
-  const acc = accountOf(bill.accountId);
-  return txs.filter(t => t.amount > 0 && t.date >= from && t.date <= to && !(acc?.last4 && t.mask && acc.last4 !== t.mask));
-}
+const nameMatches = L.nameMatches;
+const candidates = (bill, ym, txs) => L.candidates(bill, ym, txs, { graceDays: db.graceDays, last4: accountOf(bill.accountId)?.last4 || '' });
 
 async function monthTransactions(ym) {
   const { transactions } = await api(`/api/transactions?from=${addDays(`${ym}-01`, -7)}&to=${addDays(`${ym}-${daysInMonth(ym)}`, 14)}`);
   return transactions;
 }
 
-// 은행 거래와 맞춰 '나감' 자동 체크. 이미 다른 항목에 쓴 거래는 다시 쓰지 않는다.
+// 은행 거래와 맞춰 '나감' 자동 체크. 이미 다른 항목에 쓴 거래는 다시 쓰지 않는다. (샘플 자료도 이 길을 지난다)
+function applyMatches(ym, txs) {
+  const matches = L.matchMonth(billsIn(ym), ym, txs, {
+    graceDays: db.graceDays,
+    last4Of: id => accountOf(id)?.last4 || '',
+    isPaid: id => Boolean(paymentFor(id, ym)),
+    used: new Set(db.payments.map(p => p.txId).filter(Boolean)),
+  });
+  for (const { bill, tx } of matches) {
+    db.payments.push({ billId: bill.id, month: ym, paidDate: tx.date, amount: tx.amount, txId: tx.id, auto: true,
+      note: `은행 거래: ${tx.name}${tx.pending ? ' (처리 중)' : ''}` });
+  }
+  return matches;
+}
+
 async function autoCheck(ym) {
   await api('/api/sync', {});
   const txs = await monthTransactions(ym);
-  const used = new Set(db.payments.map(p => p.txId).filter(Boolean));
-  const marked = [];
-  for (const b of billsIn(ym)) {
-    if (paymentFor(b.id, ym)) continue;
-    const due = dueDate(b, ym);
-    const hit = candidates(b, ym, txs).filter(t => !used.has(t.id) && nameMatches(b, t))
-      .sort((x, y) => Math.abs(Date.parse(x.date) - Date.parse(due)) - Math.abs(Date.parse(y.date) - Date.parse(due)))[0];
-    if (!hit) continue;
-    used.add(hit.id);
-    db.payments.push({ billId: b.id, month: ym, paidDate: hit.date, amount: hit.amount, txId: hit.id, auto: true,
-      note: `은행 거래: ${hit.name}${hit.pending ? ' (처리 중)' : ''}` });
-    marked.push(b.vendor);
-  }
+  const marked = applyMatches(ym, txs).map(m => m.bill.vendor);
   save();
   bank = await api('/api/status');
   return marked;
