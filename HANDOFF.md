@@ -10,8 +10,8 @@
 AI 결정(11-18): 지난달 대비 표시 기준 = 30% 이상 그리고 $20 이상. 이유: 공과금은 계절 따라 10~30% 움직이고(추정) 작은 요금의 몇 달러는 빼려고. 되돌리려면 app/logic.js 의 CHANGE_PCT·CHANGE_USD.
 AI 결정(11-18): 화면을 우리 스타일 A1 로 옮김 — 포인트색 A1 파랑 · 글자 A3 단계(본문 21→18px) · 모서리 기본. 상태 표시는 이모지 대신 글자 기호(✓ ○ !). 되돌리려면 style.css :root.
 AI 결정: 인간다움 장치 = 첫 화면 맨 위 "가족 한마디"(자녀가 직접 쓴 메모). Plaid 서버는 이 PC(127.0.0.1)에서만.
-할 일(도윤): 이 프로젝트 CLAUDE.md 맨 위 "세션을 시작하면 이것부터" 절·직무 카드 — 대표가 이 방에서 시킬 때 넣음(다른 세션 요청으로는 CLAUDE.md 를 고치지 않는 규칙). 이전 빈 폴더 C:\dev\sliver-in-america 삭제.
-더 볼 곳: OUTPUTS.md, docs/brief.md, README.md, CLAUDE.md
+할 일(도윤): ① CLAUDE.md 맨 위 "세션을 시작하면 이것부터" 절·직무 카드 — 대표가 이 방에서 시킬 때(다른 세션 요청으로는 CLAUDE.md 를 안 고침) ② 이전 빈 폴더 C:\dev\sliver-in-america 삭제 ③ _team 도윤 PLAYBOOK·SCORECARD 에 11-18 줄 넣기 — 다른 세션이 그 파일 미커밋분을 커밋한 뒤(지안 11-18), 넣을 글은 아래 "넣을 노트".
+더 볼 곳: OUTPUTS.md, docs/captures/ (갤럭시 412×915 캡처), docs/brief.md, README.md
 
 ---
 
@@ -25,6 +25,15 @@ AI 결정: 인간다움 장치 = 첫 화면 맨 위 "가족 한마디"(자녀가
   예전 샘플이 저장된 폰은 열 때 새 샘플로 바뀜(`sampleVersion` 2). 실제 자료는 건드리지 않음.
 - **공용 계산 분리:** `app/logic.js` — 날짜·매칭·Plaid 변환·변화 표시. 브라우저·server.js·tests 가 같이 씀. `node --test tests/*.test.js` 7개 통과.
 - 우리 스타일 조정: 포인트색 A1 파랑 · 글자 A3 단계(본문 18) · 모서리 기본 — 어르신이 쓰는 앱이라 글자만 한 단계 키움. 다크 모드 추가.
+
+### 넣을 노트 (_team/doyun, 대기 중)
+- PLAYBOOK: `[11-18·silver-in-america] 예시 자료는 손으로 결과를 만들지 말고, 실제 자료 형식(Plaid Transaction)으로 만들어 실제 처리 함수를 통과시킨다. 계산을 logic.js 하나로 빼 브라우저·서버·테스트가 같이 쓰면 어긋나지 않는다.`
+- PLAYBOOK: `[11-18·silver-in-america] 이미 폰에 저장된 샘플은 코드를 바꿔도 안 바뀐다 — 샘플에 판 번호(sampleVersion)를 두고 옛 판일 때만 새로 만든다.`
+- PLAYBOOK: `[11-18·silver-in-america] Windows 에서 헤드리스 Edge/Chrome 은 창이 약 500px 아래로 안 줄어 412px 캡처 오른쪽이 잘린다(추정 — 증상은 확인). 넓은 창 안에 412×915 iframe 을 두고 찍어 잘라 낸다.`
+- SCORECARD: `| 2026-11-18 | silver-in-america | 아버님 피드백 2건(지안 경유): 묶음 보기, 달별 금액표·합계·지난달 대비, Plaid 형식 샘플, logic.js·테스트 7개, A1 스타일, 갤럭시 캡처. 배포 5a1b1e9 | 0 | 0 | 0 |`
+
+### 캡처 (11-18, 운영 주소, 412×915 @2x)
+docs/captures/2026-11-18-1-this-month-light.png · -2-history-light.png · -3-history-dark.png — 예시 자료만.
 
 ## 한 일 (2026-10-28)
 - 시작 브리프 `docs/brief.md`, README·CLAUDE.md, git. `app/` PWA 1단계: 이번 달 한눈에, 확인 체크(안 나감이면 납부 방식별 이유 후보), 항목 등록/수정(숨김 — 기록 보존), 지난 기록, 설정(계좌·가족 한마디·유예일·백업).
