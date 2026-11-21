@@ -1,11 +1,11 @@
 # HANDOFF — silver-in-america
 
-갱신: 2026-11-18 · 컴팩트: 0회 · 담당: 도윤(프로젝트 타워, 세션 제목 `도윤 · silver-in-america`)
+갱신: 2026-11-21 · 컴팩트: 0회 · 담당: 도윤(프로젝트 타워, 세션 제목 `도윤 · silver-in-america`)
 상태: 운영 중 https://altair0622.github.io/silver-in-america/ (화면만, 예시 자료). 11-18 아버님 피드백 2건 반영 — 묶음 보기(통장·카드별/종류별, 기억), 지난 기록 달별 금액표·합계·지난달 대비 표시. 샘플은 Plaid 형식 거래에서 만듦.
-다음: 대표 갤럭시 실기기 확인 끝(11-18, 잘림 없음) → 아버님 다음 피드백 기다림. Plaid 키 들어오면 sandbox 연결·동기화 시험 → 본인 계좌.
-막힘: Plaid 가입·키(대표 — 계정 만들기, server/.env 는 TOKEN_KEY 만 채워 둠). 부모님 공과금 목록(대표).
+다음: Plaid sandbox 시험 통과(11-21) → 대표가 대시보드 Keys 의 'Try for free' 로 실제 은행(Production) 신청 → 승인되면 본인 계좌 연결. 그 전에 재연결 안내(ITEM_LOGIN_REQUIRED·update mode) 넣기.
+막힘: Plaid Production 신청(대표 — 가입·2단계 인증·sandbox 키는 11-21 완료). 부모님 공과금 목록(대표).
 결정: 실제 은행(production) 연결 방식 — ① Plaid 무료 체험 범위로 본인 계좌 1~2개만 (추천, 요금·심사 조건은 가입 후 대시보드에서 확인) ② 유료 요금제 · 풀리면 PLAID_ENV=production 으로 본인 계좌 연결
-긴 일: 없음 (Plaid 키가 들어오면 sandbox 전체 흐름 시험 + 실제 거래로 매칭 기준 조정)
+긴 일: 없음 (Production 승인 뒤 실제 거래로 매칭 기준 조정)
 정해짐(대표 10-28): 공개 저장소 + GitHub Pages. 은행 확인은 Plaid 로 바로, 본인 계좌부터.
 AI 결정(11-18): 지난달 대비 표시 기준 = 30% 이상 그리고 $20 이상. 이유: 공과금은 계절 따라 10~30% 움직이고(추정) 작은 요금의 몇 달러는 빼려고. 되돌리려면 app/logic.js 의 CHANGE_PCT·CHANGE_USD.
 AI 결정(11-18): 화면을 우리 스타일 A1 로 옮김 — 포인트색 A1 파랑 · 글자 A3 단계(본문 21→18px) · 모서리 기본. 상태 표시는 이모지 대신 글자 기호(✓ ○ !). 되돌리려면 style.css :root.
@@ -47,7 +47,9 @@ docs/captures/2026-11-18-1-this-month-light.png · -2-history-light.png · -3-hi
 - 확인됨(10-28): 운영 주소 표시·서비스 워커 등록, 키 없는 서버 상태·Origin·경로 차단, 가짜 거래 자동 매칭.
 - 확인됨(실기기, 11-18 21:26 대표 갤럭시·다크 모드, 지안 전달): 지난 기록 세 달 금액, Georgia Power $311 ▲143% 노란 칸, '아직' 표시 모두 보임, 잘림 없음.
   대표가 "왜 검은 바탕이냐"고 물음 → 폰 다크 모드 설정을 따라간다고 설명, 동작은 그대로 둠.
-- 미검증: 홈 화면 추가·오프라인, 백업 불러오기 실제 파일, 실제 Plaid 호출 전부(키 필요).
+- 확인됨(11-21, Plaid sandbox): 키 설정 → `/api/sandbox-connect`(First Platypus Bank, 계좌 5개) → 동기화 거래 48건(첫 호출은 0건, 몇 초 뒤 48건 — Plaid 가 처음 거래를 준비하는 시간)
+  → localhost:8787 앱에 시험 항목(SparkFun 끝 0000, Touchstone Climbing 끝 3333, Georgia Power) 넣고 '은행에서 확인하기' → 2건 자동 '나감', Georgia Power 는 거래 없어 '안 나감'. sandbox 기본 거래에는 공과금이 없어 다른 가게 이름으로 시험.
+- 미검증: 홈 화면 추가·오프라인, 백업 불러오기 실제 파일, Plaid Link 창(실제 은행 로그인 화면), 재연결 필요 상태, Production.
 
 ## 남은 일 / 다음 단계
 1. 아버님 피드백 다음 판 — 표가 읽히는지, 노란 칸 기준이 맞는지.
