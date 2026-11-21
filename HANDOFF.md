@@ -2,7 +2,7 @@
 
 갱신: 2026-11-21 · 컴팩트: 0회 · 담당: 도윤(프로젝트 타워, 세션 제목 `도윤 · silver-in-america`)
 상태: 운영 중 https://altair0622.github.io/silver-in-america/ (화면만, 예시 자료). 11-18 아버님 피드백 2건 반영 — 묶음 보기(통장·카드별/종류별, 기억), 지난 기록 달별 금액표·합계·지난달 대비 표시. 샘플은 Plaid 형식 거래에서 만듦.
-다음: Plaid sandbox 시험 통과(11-21) → 대표가 대시보드 Keys 의 'Try for free' 로 실제 은행(Production) 신청 → 승인되면 본인 계좌 연결. 그 전에 재연결 안내(ITEM_LOGIN_REQUIRED·update mode) 넣기.
+다음: Plaid sandbox 시험·재연결 안내 끝(11-21) → 대표가 대시보드 Keys 의 'Try for free' 로 실제 은행(Production) 신청 → 승인되면 본인 계좌 연결.
 막힘: Plaid Production 신청(대표 — 가입·2단계 인증·sandbox 키는 11-21 완료). 부모님 공과금 목록(대표).
 결정: 실제 은행(production) 연결 방식 — ① Plaid 무료 체험 범위로 본인 계좌 1~2개만 (추천, 요금·심사 조건은 가입 후 대시보드에서 확인) ② 유료 요금제 · 풀리면 PLAID_ENV=production 으로 본인 계좌 연결
 긴 일: 없음 (Production 승인 뒤 실제 거래로 매칭 기준 조정)
@@ -14,6 +14,11 @@ AI 결정: 인간다움 장치 = 첫 화면 맨 위 "가족 한마디"(자녀가
 더 볼 곳: OUTPUTS.md, docs/captures/ (갤럭시 412×915 캡처), docs/brief.md, README.md
 
 ---
+
+## 한 일 (2026-11-21)
+- Plaid 가입·2단계 인증·sandbox 키(대표) → sandbox 연결·동기화·앱 자동 확인 시험 통과.
+- 재연결 안내: 동기화 중 ITEM_LOGIN_REQUIRED·PENDING_EXPIRATION·PENDING_DISCONNECT 이면 그 은행만 `needsRelink` 표시하고 다른 은행은 계속.
+  `/api/link-token {itemId}` = update mode(같은 연결 되살림, 토큰 교환 없음), 끝나면 `/api/relinked` 가 표시를 지우고 다시 동기화.
 
 ## 한 일 (2026-11-18, 아버님 피드백 — 지안 경유)
 - **묶음 보기:** 이번 달·지난 기록 위에 `통장·카드별 | 종류별` 전환. 종류별 = 공과금(전기·수도·가스·쓰레기)·통신(인터넷·휴대폰)·보험·기타.
@@ -49,7 +54,9 @@ docs/captures/2026-11-18-1-this-month-light.png · -2-history-light.png · -3-hi
   대표가 "왜 검은 바탕이냐"고 물음 → 폰 다크 모드 설정을 따라간다고 설명, 동작은 그대로 둠.
 - 확인됨(11-21, Plaid sandbox): 키 설정 → `/api/sandbox-connect`(First Platypus Bank, 계좌 5개) → 동기화 거래 48건(첫 호출은 0건, 몇 초 뒤 48건 — Plaid 가 처음 거래를 준비하는 시간)
   → localhost:8787 앱에 시험 항목(SparkFun 끝 0000, Touchstone Climbing 끝 3333, Georgia Power) 넣고 '은행에서 확인하기' → 2건 자동 '나감', Georgia Power 는 거래 없어 '안 나감'. sandbox 기본 거래에는 공과금이 없어 다른 가게 이름으로 시험.
-- 미검증: 홈 화면 추가·오프라인, 백업 불러오기 실제 파일, Plaid Link 창(실제 은행 로그인 화면), 재연결 필요 상태, Production.
+- 확인됨(11-21, 재연결): `/api/sandbox-break`(sandbox reset_login) → 동기화가 ITEM_LOGIN_REQUIRED 를 잡아 `relink` 로 돌려줌 → 이번 달·설정 화면에 '연결이 잠시 끊겼어요 · 다시 연결하기'
+  → 누르면 update mode 링크 토큰으로 Plaid 창이 열림. 서비스 워커가 Plaid 스크립트까지 가로채던 것 고침(같은 주소만).
+- 미검증: 홈 화면 추가·오프라인, 백업 불러오기 실제 파일, Plaid 창 안에서 끝까지 다시 로그인 → 안내가 사라지는지(대표가 sandbox 시험 로그인으로 해 볼 수 있음), Production.
 
 ## 남은 일 / 다음 단계
 1. 아버님 피드백 다음 판 — 표가 읽히는지, 노란 칸 기준이 맞는지.

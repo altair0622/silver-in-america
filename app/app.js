@@ -153,6 +153,7 @@ function screenMonth(ym) {
   </div>`;
   if (counts.missed) html += '<p class="lead bad">빨간 항목을 눌러 이유를 보세요.</p>';
   else if (bills.length && counts.wait === 0) html += '<p class="lead ok">이번 달 모두 나갔어요.</p>';
+  if (isNow) html += relinkHtml();
   if (bankReady() && counts.paid < bills.length) {
     html += '<button class="btn" id="bankcheck">은행에서 확인하기</button><p id="bankmsg" class="hint" aria-live="polite"></p>';
   }
@@ -178,6 +179,7 @@ function screenMonth(ym) {
     전화를 끊고 이 화면에서 "나감"인지 먼저 확인하세요. 진짜 회사는 기프트카드를 요구하지 않아요.</div>`;
   render(isNow ? '이번 달 한눈에' : monthLabel(ym), html, isNow ? 'home' : 'history');
   bindGroupSwitch(() => screenMonth(ym));
+  bindRelink(() => screenMonth(ym));
 
   const bc = document.getElementById('bankcheck');
   if (bc) bc.onclick = async () => {
@@ -185,6 +187,7 @@ function screenMonth(ym) {
     try {
       const marked = await autoCheck(ym);
       screenMonth(ym);
+      if (needsRelink() && !marked.length) return;   // 위의 '다시 연결' 안내가 이유를 말해 준다
       document.getElementById('bankmsg') && (document.getElementById('bankmsg').textContent = marked.length
         ? `${marked.join(', ')} — 은행 거래를 찾아 "나감"으로 표시했어요. 맞는지 한 번 봐 주세요.`
         : '새로 찾은 출금이 없어요. 항목을 눌러 은행 거래 목록에서 직접 고를 수도 있어요.');
@@ -433,7 +436,8 @@ function screenSettings() {
     try { await fn(); bank = await api('/api/status'); screenSettings(); }
     catch (e) { btn.disabled = false; alert(`은행을 연결하지 못했어요: ${e.message}`); }
   };
-  if ($('link')) $('link').onclick = () => connect($('link'), openPlaidLink);
+  if ($('link')) $('link').onclick = () => connect($('link'), () => openPlaidLink());
+  bindRelink(screenSettings);
   if ($('sbx')) $('sbx').onclick = () => connect($('sbx'), () => api('/api/sandbox-connect', {}));
   $('fn').onsubmit = e => { e.preventDefault(); db.familyNote = $('nt').value.trim(); db.familyName = $('nm').value.trim(); save(); alert('저장했어요.'); };
   $('g').onchange = () => { db.graceDays = Number($('g').value); save(); };
@@ -549,6 +553,23 @@ async function loadBank() {
   try { bank = await api('/api/status'); } catch { bank = null; }
 }
 const bankReady = () => bank && bank.configured && bank.banks.length > 0;
+const needsRelink = () => Boolean(bank && bank.relink && bank.relink.length);
+
+// 은행 비밀번호를 바꾸면 Plaid 가 다시 로그인을 요구한다 → 큰 안내와 '다시 연결하기' 버튼
+function relinkHtml() {
+  if (!needsRelink()) return '';
+  return bank.relink.map(r => `<div class="relink" role="alert">
+    <p><b>${esc(r.institution)}</b> 연결이 잠시 끊겼어요.</p>
+    <p class="small">은행 비밀번호를 바꾸셨거나 은행이 다시 확인을 원할 때 이래요. 돈이나 기록에는 문제가 없어요.</p>
+    <button class="btn" data-relink="${esc(r.itemId)}">다시 연결하기</button></div>`).join('');
+}
+function bindRelink(after) {
+  view.querySelectorAll('[data-relink]').forEach(btn => btn.onclick = async () => {
+    btn.disabled = true; btn.textContent = '연결 화면을 여는 중…';
+    try { await openPlaidLink(btn.dataset.relink); bank = await api('/api/status'); after(); }
+    catch (e) { btn.disabled = false; btn.textContent = '다시 연결하기'; alert(`다시 연결하지 못했어요: ${e.message}`); }
+  });
+}
 
 const nameMatches = L.nameMatches;
 const candidates = (bill, ym, txs) => L.candidates(bill, ym, txs, { graceDays: db.graceDays, last4: accountOf(bill.accountId)?.last4 || '' });
@@ -582,14 +603,18 @@ async function autoCheck(ym) {
   return marked;
 }
 
-function openPlaidLink() {
+// itemId 를 주면 끊긴 연결을 되살린다(Plaid update mode) — 새 연결이 아니라 같은 은행
+function openPlaidLink(itemId) {
   return new Promise((resolve, reject) => {
     const start = async () => {
       try {
-        const { link_token } = await api('/api/link-token', {});
+        const { link_token } = await api('/api/link-token', itemId ? { itemId } : {});
         window.Plaid.create({
           token: link_token,
-          onSuccess: async public_token => { try { resolve(await api('/api/exchange', { public_token })); } catch (e) { reject(e); } },
+          onSuccess: async public_token => {
+            try { resolve(await (itemId ? api('/api/relinked', { itemId }) : api('/api/exchange', { public_token }))); }
+            catch (e) { reject(e); }
+          },
           onExit: err => err ? reject(new Error(err.display_message || err.error_message || '연결을 마치지 못했어요')) : resolve(null),
         }).open();
       } catch (e) { reject(e); }
@@ -608,6 +633,7 @@ function bankSettingsHtml() {
   let html = '<h2>은행 연결</h2>';
   if (!bank.configured) return html + '<p class="hint">서버에 Plaid 키가 아직 없어요. server/.env 를 채워 주세요.</p>';
   if (bank.env === 'sandbox') html += '<p class="sample-banner">지금은 Plaid 시험용(가짜 은행) 모드예요.</p>';
+  html += relinkHtml();
   if (bank.accounts.length) {
     html += '<ul class="list-plain">' + bank.accounts.map(a =>
       `<li><b>${esc(a.institution || '은행')}</b> · ${esc(a.name)}${a.mask ? ` (끝 ${esc(a.mask)})` : ''}</li>`).join('') + '</ul>';

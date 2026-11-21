@@ -88,6 +88,7 @@ async function syncAll() {
   let added = 0;
   for (const item of s.items) {
     const access_token = decrypt(item.token);
+    try {
     let more = true;
     while (more) {
       const r = await plaid('/transactions/sync', { access_token, cursor: item.cursor || undefined, count: 500 });
@@ -102,11 +103,20 @@ async function syncAll() {
       item.cursor = r.next_cursor;
       more = r.has_more;
     }
+    item.needsRelink = false;
+    } catch (e) {
+      // 은행 비밀번호를 바꿨거나 동의 기간이 끝나면 Plaid 가 다시 로그인을 요구한다 → 표시만 하고 다른 은행은 계속
+      if (!RELINK_CODES.has(e.code)) throw e;
+      item.needsRelink = true;
+    }
   }
   s.syncedAt = new Date().toISOString();
   writeStore(s);
-  return { added, syncedAt: s.syncedAt };
+  return { added, syncedAt: s.syncedAt, relink: relinkList(s) };
 }
+
+const RELINK_CODES = new Set(['ITEM_LOGIN_REQUIRED', 'PENDING_EXPIRATION', 'PENDING_DISCONNECT']);
+const relinkList = s => s.items.filter(i => i.needsRelink).map(i => ({ itemId: i.itemId, institution: i.institution || '은행' }));
 
 function listTransactions(from, to) {
   const s = readStore();
@@ -135,14 +145,26 @@ const routes = {
   'GET /api/status': () => {
     const s = readStore();
     return { configured, env: PLAID_ENV, banks: s.items.map(i => i.institution || '은행'),
-      accounts: Object.values(s.accounts).map(a => ({ name: a.name, mask: a.mask, institution: a.institution })), syncedAt: s.syncedAt || null };
+      accounts: Object.values(s.accounts).map(a => ({ name: a.name, mask: a.mask, institution: a.institution })), syncedAt: s.syncedAt || null,
+      relink: relinkList(s) };
   },
-  'POST /api/link-token': async () => {
-    const r = await plaid('/link/token/create', {
-      user: { client_user_id: 'silver-local-user' }, client_name: '공과금 확인',
-      products: ['transactions'], transactions: { days_requested: 180 }, country_codes: ['US'], language: 'en',
-    });
+  // itemId 가 오면 '다시 연결'(update mode): 같은 은행 연결을 살린다. 새 토큰 교환은 필요 없다.
+  'POST /api/link-token': async body => {
+    const base = { user: { client_user_id: 'silver-local-user' }, client_name: '공과금 확인', country_codes: ['US'], language: 'en' };
+    const item = body?.itemId ? readStore().items.find(i => i.itemId === body.itemId) : null;
+    if (body?.itemId && !item) throw new Error('그 은행 연결을 찾지 못했어요');
+    const r = await plaid('/link/token/create', item
+      ? { ...base, access_token: decrypt(item.token) }
+      : { ...base, products: ['transactions'], transactions: { days_requested: 180 } });
     return { link_token: r.link_token };
+  },
+  'POST /api/relinked': async body => {
+    const s = readStore();
+    const item = s.items.find(i => i.itemId === body?.itemId);
+    if (!item) throw new Error('그 은행 연결을 찾지 못했어요');
+    item.needsRelink = false;
+    writeStore(s);
+    return syncAll();
   },
   'POST /api/exchange': async body => saveItem(String(body.public_token || '')),
   'POST /api/sync': () => syncAll(),
@@ -156,6 +178,12 @@ const routes = {
     if (PLAID_ENV !== 'sandbox') throw new Error('sandbox 전용');
     const r = await plaid('/sandbox/public_token/create', { institution_id: 'ins_109508', initial_products: ['transactions'] });
     return saveItem(r.public_token);
+  },
+  // 시험용(sandbox)에서만: '다시 로그인 필요' 상태를 일부러 만든다
+  'POST /api/sandbox-break': async () => {
+    if (PLAID_ENV !== 'sandbox') throw new Error('sandbox 전용');
+    for (const i of readStore().items) await plaid('/sandbox/item/reset_login', { access_token: decrypt(i.token) });
+    return syncAll();
   },
 };
 
