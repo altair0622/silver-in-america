@@ -1,5 +1,5 @@
 // 오프라인에서도 열리도록 앱 파일만 캐시한다. 파일을 바꾸면 VERSION 을 올린다.
-const VERSION = 'v4';
+const VERSION = 'v5';
 const FILES = ['./', 'index.html', 'style.css', 'logic.js', 'app.js', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', e => {
