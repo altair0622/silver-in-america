@@ -1,9 +1,9 @@
 # HANDOFF — silver-in-america
 
-갱신: 2026-11-21 · 컴팩트: 0회 · 담당: 도윤(프로젝트 타워, 세션 제목 `도윤 · silver-in-america`)
+갱신: 2026-11-22 · 컴팩트: 0회 · 담당: 도윤(프로젝트 타워, 세션 제목 `도윤 · silver-in-america`)
 상태: 운영 중 https://altair0622.github.io/silver-in-america/ (화면만, 예시 자료). 11-18 아버님 피드백 2건 반영 — 묶음 보기(통장·카드별/종류별, 기억), 지난 기록 달별 금액표·합계·지난달 대비 표시. 샘플은 Plaid 형식 거래에서 만듦.
-다음: Plaid sandbox 시험·재연결 안내 끝(11-21) → 대표가 대시보드 Keys 의 'Try for free' 로 실제 은행(Production) 신청 → 승인되면 본인 계좌 연결.
-막힘: Plaid Production 신청(대표 — 가입·2단계 인증·sandbox 키는 11-21 완료). 부모님 공과금 목록(대표).
+다음: (대표 11-22) 부모님 목록 받기 전에 대표 본인 계좌의 정기 출금부터 본다 — Production 승인 → 본인 계좌 연결 → `node tools/recurring.js` 로 종류·주기만 뽑아 '부모님 기본 항목'과 '부모님께 물어볼 것'을 여기 적고 원자료(server/.data/store-production.json) 삭제.
+막힘: 실제 계좌 연결 불가 — 지금 키는 시험 은행용(11-21 Keys 화면에 Production 'You don't have access'). 대표가 누를 곳: ① dashboard.plaid.com 로그인(2단계 인증) → 왼쪽 Developers → Keys ② Production secret 옆 'Try for free' → 회사·쓰는 목적(개인 공과금 확인, Transactions) 적고 신청, 무료 범위·요금 확인 ③ 승인되면 Production secret 을 server/.env PLAID_SECRET 에 붙이고 PLAID_ENV=production → 도윤에게 "넣었어".
 결정: 실제 은행(production) 연결 방식 — ① Plaid 무료 체험 범위로 본인 계좌 1~2개만 (추천, 요금·심사 조건은 가입 후 대시보드에서 확인) ② 유료 요금제 · 풀리면 PLAID_ENV=production 으로 본인 계좌 연결
 긴 일: 없음 (Production 승인 뒤 실제 거래로 매칭 기준 조정)
 정해짐(대표 10-28): 공개 저장소 + GitHub Pages. 은행 확인은 Plaid 로 바로, 본인 계좌부터.
@@ -14,6 +14,12 @@ AI 결정: 인간다움 장치 = 첫 화면 맨 위 "가족 한마디"(자녀가
 더 볼 곳: OUTPUTS.md, docs/captures/ (갤럭시 412×915 캡처), docs/brief.md, README.md
 
 ---
+
+## 한 일 (2026-11-22, 대표 결정 — 지안 경유)
+- 본인 계좌 정기 출금 보기 준비: `app/logic.js` 에 `kindOf`(Plaid personal_finance_category → 전기·가스/수도/쓰레기/휴대폰/인터넷/보험/카드값/대출/구독/의료, 없으면 이름 단어)와
+  `recurring`(같은 곳·같은 계좌, 간격이 매주~해마다 중 하나로 일정하면 정기) 추가, `fromPlaid` 가 분류(category)도 남김. 테스트 8개 통과.
+- `tools/recurring.js`: 이 PC 의 거래에서 종류·주기·날짜 범위·고정/변동·횟수만 출력(금액·계좌번호·가맹점 원문 없음, `--names` 는 화면 확인용). sandbox 에서 동작 확인(가짜 은행은 모든 거래가 매달 반복이라 의미 있는 결과는 실제 계좌에서).
+- 공개 저장소라 실제 결과는 종류·주기만 머리말에 적고, 원자료는 끝나면 지운다(지안 11-22).
 
 ## 한 일 (2026-11-21)
 - Plaid 가입·2단계 인증·sandbox 키(대표) → sandbox 연결·동기화·앱 자동 확인 시험 통과.

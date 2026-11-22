@@ -12,8 +12,10 @@ const plaidTx = (over = {}) => ({
 test('fromPlaid: Plaid 거래를 앱 모양으로 줄이고 끝 4자리를 붙인다', () => {
   assert.deepEqual(L.fromPlaid(plaidTx(), { acc1: '1234' }), {
     id: 'tx1', accountId: 'acc1', date: '2026-10-05', amount: 128.1,
-    name: 'GEORGIA POWER CO BILL PAY', merchant: 'Georgia Power', pending: false, mask: '1234',
+    name: 'GEORGIA POWER CO BILL PAY', merchant: 'Georgia Power', pending: false, category: '', mask: '1234',
   });
+  assert.equal(L.fromPlaid(plaidTx({ personal_finance_category: { primary: 'RENT_AND_UTILITIES', detailed: 'RENT_AND_UTILITIES_WATER' } })).category,
+    'RENT_AND_UTILITIES_WATER');
   assert.equal(L.fromPlaid(plaidTx({ merchant_name: null })).merchant, '');
 });
 
@@ -73,4 +75,21 @@ test('kindGroup: 종류별 묶음', () => {
 test('dueDate: 31일 예정은 짧은 달에 말일로', () => {
   assert.equal(L.dueDate({ dueDay: 31 }, '2026-11'), '2026-11-30');
   assert.equal(L.dueDate({ dueDay: 31 }, '2026-02'), '2026-02-28');
+});
+
+test('recurring: 일정한 간격의 출금만 정기 출금으로, 종류·주기·날짜 범위', () => {
+  const tx = (id, date, amount, name, extra = {}) => ({ id, accountId: 'a1', date, amount, name, merchant: '', pending: false, category: '', ...extra });
+  const water = { category: 'RENT_AND_UTILITIES_WATER' };
+  const txs = [
+    tx('p1', '2026-08-05', 120, 'GEORGIA POWER CO 123'), tx('p2', '2026-09-04', 140, 'GEORGIA POWER CO 456'), tx('p3', '2026-10-06', 131, 'GEORGIA POWER CO 789'),
+    tx('w1', '2026-08-12', 52, 'CITY WATER', water), tx('w2', '2026-10-12', 55, 'CITY WATER', water),
+    tx('n1', '2026-08-15', 15.49, 'NETFLIX.COM'), tx('n2', '2026-09-15', 15.49, 'NETFLIX.COM'),
+    tx('k1', '2026-08-02', 80, 'KROGER'), tx('k2', '2026-08-09', 31, 'KROGER'), tx('k3', '2026-08-30', 64, 'KROGER'), // 불규칙 장보기
+    tx('r1', '2026-09-01', -900, 'PAYROLL'), tx('r2', '2026-10-01', -900, 'PAYROLL'),                               // 들어온 돈
+  ];
+  assert.deepEqual(L.recurring(txs).map(x => [x.kind, x.cadence, x.dayFrom, x.dayTo, x.fixed]), [
+    ['구독', '매달', 15, 15, true],
+    ['수도', '두 달마다', 12, 12, false],
+    ['전기', '매달', 4, 6, false],
+  ]);
 });
