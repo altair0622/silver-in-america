@@ -1,9 +1,9 @@
 # HANDOFF — silver-in-america
 
-갱신: 2026-11-22 · 컴팩트: 0회 · 담당: 도윤(프로젝트 타워, 세션 제목 `도윤 · silver-in-america`)
+갱신: 2026-11-25 · 컴팩트: 0회 · 담당: 도윤(프로젝트 타워, 세션 제목 `도윤 · silver-in-america`)
 상태: 운영 중 https://altair0622.github.io/silver-in-america/ (화면만, 예시 자료). 11-18 아버님 피드백 2건 반영 — 묶음 보기(통장·카드별/종류별, 기억), 지난 기록 달별 금액표·합계·지난달 대비 표시. 샘플은 Plaid 형식 거래에서 만듦.
 다음: (대표 11-22) 부모님 목록 받기 전에 대표 본인 계좌의 정기 출금부터 본다 — Production 승인 → 본인 계좌 연결 → `node tools/recurring.js` 로 종류·주기만 뽑아 '부모님 기본 항목'과 '부모님께 물어볼 것'을 여기 적고 원자료(server/.data/store-production.json) 삭제.
-막힘: Production 키 넣기(대표, 11-22 승인됨) — ① 파일 C:\dev\silver-in-america\server\.env (git 제외됨) ② `PLAID_SECRET=` 뒤의 sandbox 값을 지우고 Keys 화면 Production secret 을 붙여 저장(PLAID_CLIENT_ID 는 그대로) ③ 도윤에게 "넣었어" → 도윤이 PLAID_ENV=production 으로 바꾸고 본인 계좌 1~2개 연결.
+막힘: 대표 본인 계좌 연결(대표 손 — 은행 로그인·동의, 은행 1~2곳). 키는 production 에서 통함(11-25 link token 만들기 성공), 연결된 은행 0곳. 순서: ① 이 PC 에서 http://localhost:8787/#/settings (안 열리면 `node server/server.js`) ② '+ 은행 연결하기' → Plaid 창에서 은행 고르고 직접 로그인, 공과금 나가는 계좌 1~2개만 체크 ③ 도윤에게 "연결됐어". 큰 은행이 목록에서 막히면 Plaid 쪽 은행별 등록 때문일 수 있음(추정).
 정해짐(대표 11-22, 지안 전달): 실제 은행은 ① Plaid 무료 범위로 본인 계좌 1~2개만 신청. 남은 것은 대표의 'Try for free' 신청 클릭 → 승인되면 도윤이 바로 연결.
 긴 일: 없음 (Production 승인 뒤 실제 거래로 매칭 기준 조정)
 정해짐(대표 10-28): 공개 저장소 + GitHub Pages. 은행 확인은 Plaid 로 바로, 본인 계좌부터.
